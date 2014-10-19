@@ -1,0 +1,1746 @@
+//  _Header4 - Load the Panel and see how it works
+//  _Header5 - Changed "TestSnd.w" to "_SndTest.w"
+//           - Added remote.panel with
+//             - Panasonic
+//             - Toshiba
+//             - LG
+//  _Header6 - Adding "setName" to "Tools" Menu
+//           - Fixed first panel's inability to work with 8 or more files
+//  _Header7 - Adding "calib" to "Tools" Menu
+//           - Note this requires "_calib.txt" to be loaded
+//  _Header8 - Do NOT allow BT Power Off if Connected
+//           - Added _Header# in Information
+//           - Make Sure Robot Motors are stopped after application is run
+//           - Use _Header8.panel now
+//             - Combined "about" and "tm" menus
+//             - Do not show current ("uiVersion") script 
+//             - Adding "Files" to Tools menu
+//           - Found a few problems with "Name" action
+//  _Header9 - If a blank Bluetooth "Friendly Name", then error message generated
+//           - Changed "Connected" Bluetooth "Friendly Name" error to return to "Tools"
+//           - In "Calibrate", reduced the number of "clicks" to ensure never any error
+//           - In "Calibrate", adjusted the Bar graphs for the new reality
+str uiVersion = "_Header9";
+
+int                         i;
+int                         j;
+int                         numFiles;
+int                         volume;
+int                         sleepTime;
+int                         capState = 0;
+int                         _calibTurn;
+int                         orig_calibTurn;
+int                         _calibLine;
+int                         orig_calibLine;
+int                         moveCount = 0;
+int                         firstFile;
+int                         fileChangeFlag = 0;
+
+
+str                         panelStatus;
+str                         activeControl = "tools";
+str                         panelControl;
+str                         fileNameFull;
+str                         fileNameDesc;
+macro                       MAXFILES 8
+str                         fileName[MAXFILES];  
+str                         fileNameLabel[MAXFILES];
+str                         fileNameIcon[MAXFILES];
+str                         menuFiles[MAXFILES];
+str                         originalMenuFiles[MAXFILES];
+str                         originalCurrentName;
+str                         currentName;
+str                         _calibFile;
+str                         fileList;
+str                         _activeFile;
+str                         currentFile;
+str                         scriptFile1;
+str                         scriptFile2;
+str                         scriptFile3;
+str                         tempName;
+
+
+
+//  Check to see if the version is 37 or greater
+    currentName = syscall(getsoftwareversion, "");
+    if (37 > stoi(syscall(tostring, "2:" + currentName)))
+    {
+        syscall(error, "Invalid System Software");
+    }
+
+    _activeFile = syscall(fileread, "_file.txt");
+    for (i = j = 0; MAXFILES > i; ++i) {
+        if (len(_activeFile) <= j) {
+            break;
+        }
+        if ('\r' == _activeFile.j) {
+            if (len(_activeFile) <= ++j) {
+                break;
+            }
+            else if ('\n' == _activeFile.j) {
+                ++j;
+            }
+        }
+        else if ('\n' == _activeFile.j) {
+            if (len(_activeFile) <= ++j) {
+                break;
+            }
+            else if ('\r' == _activeFile.j) {
+                ++j;
+            }
+        }
+        if (len(_activeFile) <= j) {
+            break;
+        }
+        for (menuFiles[i] = ""; len(_activeFile) > j; ++j) {
+            if ('\r' == _activeFile.j) {
+                break;
+            }
+            menuFiles[i] = menuFiles[i] + _activeFile.j;
+        }
+    }
+    for (; MAXFILES > i; ++i) {
+        menuFiles[i] = "";
+    }
+
+    for (;;) {
+
+        syscall(loadpanelfile, "_Header1.p");
+
+        for (numFiles = fileChangeFlag = 0; 8 > numFiles;) {  
+            if ("" == menuFiles[numFiles]) {
+                break;
+            }
+            else {
+                for (syscall(dir, "*.s"); "" != (currentFile = syscall(dirnext, ""));) {
+                    if (menuFiles[numFiles] == currentFile) {
+                        break;
+                    }
+                }
+                if ("" == currentFile) {  //  No longer in system, delete it
+                    for (i = numFiles; (MAXFILES - 1) > i; ++i) {
+                        menuFiles[i] = menuFiles[i + 1];
+                    }
+                    fileChangeFlag = -1;
+                }
+                else {  //  Display the Program/We have a match
+                    fileName[numFiles] = currentFile;
+                    fileNameLabel[numFiles] = "";
+                    if (0 == (fileNameDesc = syscall(getmetadesc, fileName[numFiles]))) {
+                        for (i = 0; '.' != fileName[numFiles].i; ++i) {
+                            fileNameLabel[numFiles] = fileNameLabel[numFiles] + fileName[numFiles].i;
+                        }
+                    }
+                    else {
+                        for (i = 0; len(fileNameDesc) - 1 != i; ++i) {
+                            if (':' == fileNameDesc.i) {
+                                break;
+                            }
+                            fileNameLabel[numFiles] = fileNameLabel[numFiles] + fileNameDesc.i;
+                        }
+                        if (':' != fileNameDesc.i) {
+                            fileNameLabel[numFiles] = "";
+                            for (i = 0; '.' != fileName[numFiles].i; ++i) {
+                                fileNameLabel[numFiles] = fileNameLabel[numFiles] + fileName[numFiles].i;
+                            }
+                        }               
+                    }
+                    fileNameIcon[numFiles] = syscall(geticon, fileName[numFiles]);
+                    syscall(setpanelicon, "pgm" + itos(numFiles) + ":" + fileNameIcon[numFiles]);
+                    syscall(stoppanelcontrol, "pgm" + itos(numFiles));
+                    if ("tools" == activeControl) {
+                        activeControl = "pgm" + itos(numFiles);
+                    }
+                    ++numFiles;
+                }
+            }
+        }
+
+        if (fileChangeFlag) {
+            for (_activeFile = "", i = 0; MAXFILES > i; ++i) {
+                if ("" != menuFiles[i]) {
+                    _activeFile = _activeFile + menuFiles[i] + "\r\n";
+                }
+            }
+            syscall(filedelete, "_file.txt");
+            syscall(filewrite, "_file.txt:" + _activeFile);
+        }
+
+
+        syscall(setactivepanelcontrol, activeControl);
+        syscall(runpanelfile, "");
+
+        for (; "RUN:" == syscall(tostring, "4:" + syscall(getactivepanelstatus, ""));) {
+            panelStatus = syscall(fromstring, "4:" + syscall(getactivepanelstatus, ""));
+            if ("tools" == panelStatus) {
+                syscall(setpaneltext, "pgmname:Tools");
+            }
+            else {
+                activeControl = panelStatus;
+                syscall(setpaneltext, "pgmname:" + fileNameLabel[panelStatus.3 - '0']);
+                syscall(motorleftset, "0");  syscall(motorrightset, "0");
+            }
+        }
+
+        if ("tools" != panelStatus) {
+            syscall(exec, fileName[panelStatus.3 - '0']);
+            syscall(motorleftset, "0");  syscall(motorrightset, "0");
+        }
+        else {
+            activeControl = "BTPwr";
+            for (; "tools" == panelStatus;) {
+                syscall(loadpanelfile, "_Header8.p");
+                syscall(setactivepanelcontrol, activeControl);
+                syscall(runpanelfile, "");
+                for (panelStatus = syscall(getactivepanelstatus, ""); 
+                        "RUN:" == syscall(tostring, "4:" + panelStatus); 
+                        panelStatus = syscall(getactivepanelstatus, "")) {
+                    panelStatus = syscall(fromstring, "4:" + panelStatus);
+                    if ("BTPwr" == panelStatus) {
+                        syscall(setpaneltext, "pgmname:Bluetooth");
+                        activeControl = "BTPwr";
+                    }
+                    else if ("BTname" == panelStatus) {
+                        syscall(setpaneltext, "pgmname:Robot Name");
+                        activeControl = "BTname";
+                    }
+                    else if ("about" == panelStatus) {
+                        syscall(setpaneltext, "pgmname:About Robot");
+                        activeControl = "about";
+                    }
+                    else if ("remSelect" == panelStatus) {
+                        syscall(setpaneltext, "pgmname:Remote Select");
+                        activeControl = "remSelect";
+                    }
+                    else if ("file" == panelStatus) {
+                        syscall(setpaneltext, "pgmname:Files");
+                        activeControl = "file";
+                    }
+                    else if ("volSelect" == panelStatus) {
+                        syscall(setpaneltext, "pgmname:Set Volume");
+                        activeControl = "volSelect";
+                    }
+                    else if ("sleepSet" == panelStatus) {
+                        syscall(setpaneltext, "pgmname:Sleep Timeout");
+                        activeControl = "sleepSet";
+                    }
+                    else if ("calib" == panelStatus) {
+                        syscall(setpaneltext, "pgmname:Calibration");
+                        activeControl = "calib";
+                    }
+                    else if ("return" == panelStatus) {
+                        syscall(setpaneltext, "pgmname:Return");
+                    }
+                    else {
+                        syscall(error, "Unknown panelStatus = \"" + panelStatus + "\"");
+                    }
+                }
+                if ("BTPwr" == (panelStatus = syscall(fromstring, "4:" + panelStatus))) {
+                    syscall(loadpanelfile, "_exec2.p");
+                    syscall(setpaneltext, "pgmname:Bluetooth");
+                    syscall(setpanelicon, "tools:_2bt.b");
+                    syscall(loadsubpanelfile, "_btPwr01.p");
+                    syscall(setpaneltext, "macAddr:" + syscall(btser, ""));
+                    syscall(setactivepanelcontrol, "pwr:1");
+                    if ("2" != syscall(btstatus, "")) {  //  BT On
+                        syscall(setpanelvalue, "pwr:1");
+                    }
+                    else {
+                        syscall(setpanelvalue, "pwr:2");
+                    }
+                    syscall(runpanelfile, "");
+                    for (; "END:return" != syscall(getactivepanelstatus, "");) {
+                        panelStatus = syscall(fromstring, "4:" + syscall(getactivepanelstatus, ""));
+                        if ("pwr" == syscall(substring, "4:7:" + syscall(getactivepanelstatus, ""))) {
+                            if ("END:" == syscall(tostring, "4:" + syscall(getactivepanelstatus, ""))) {
+                                i = stoi(syscall(fromstring, "8:" + syscall(getactivepanelstatus, "")));
+                                syscall(setpanelvalue, "pwr:" + itos(i));
+                                if (1 == i) {
+                                    syscall(bton, "");
+                                }
+                                else {
+                                    if ("CONNECTED" == syscall(btstatusname, "")) {
+                                        syscall(messageboxok, "Cannot Turn off BT when Active");
+                                        syscall(setpanelvalue, "pwr:1");
+                                    }
+                                    else {
+                                        syscall(btoff, "");
+                                    }
+                                }
+                                syscall(runpanelfile, "");
+                            }
+                        }
+                    }
+                    panelStatus = "tools";
+                }
+                else if ("BTname" == panelStatus) {
+                    syscall(loadpanelfile, "_exec2.p");
+                    syscall(setpanelicon, "tools:_Name.b");
+                    syscall(loadsubpanelfile, "_BTname.p");
+                    syscall(setactivepanelcontrol, "tee");
+
+                    originalCurrentName = currentName = syscall(getname, "");
+                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                    syscall(setpaneltext, "pgmname:Robot Name");
+                    syscall(runpanelfile, "");
+                    capState = 0;
+                    for (panelControl = ""; "return" != panelControl;) {
+
+                        for (; "RUN:" == syscall(tostring, "4:" + (panelStatus = syscall(getactivepanelstatus, "")));) {
+                        }
+        
+                        if ("return" == (panelControl = syscall(fromstring, "4:" + panelStatus))) {
+                            if ("" == currentName) {
+                                syscall(messageboxok, "Cannot Have Null Name");
+                                panelControl = "return";
+                            }
+                            else {
+                                for (; " " == syscall(fromstring, itos(len(currentName) - 1) + ":" + currentName); 
+                                    currentName = syscall(tostring, itos(len(currentName) - 1) + ":" + currentName)) {
+                                }
+                                syscall(setpaneltext, "BTname:" + currentName + "_");
+                                if ("-" == syscall(fromstring, itos(len(currentName) - 1) + ":" + currentName)) {
+                                    syscall(messageboxok, "Cannot End Name With \"-\"");
+                                    panelControl = "do_not_return";
+                                }
+                                else {
+                                    if (originalCurrentName == currentName) {
+                                        panelControl = "return";
+                                    }
+                                    else {
+                                        panelStatus = syscall(btstatus, "");
+                                        if (("2" != panelStatus) && ("3" != panelStatus)) {
+                                            syscall(messageboxok, "Cannot Change Name when Connected");
+                                            panelControl = "return";
+                                        }
+                                        else {
+                                            if ("YES" == syscall(messageboxyesno, "Save New Jade Robot Name?")) {
+                                                syscall(setname, currentName);
+                                            }
+                                            panelControl = "return";
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        else if ("caps" == panelControl) {
+                            if (0 == capState) {
+
+                                syscall(setpanelicon, "caps:_10x9_UA.b");
+
+                                syscall(setpanelicon, "queue:_10x9_Q_.b");
+                                syscall(setpanelicon, "doubleu:_10x9_W_.b");
+                                syscall(setpanelicon, "ee:_10x9_E_.b");
+                                syscall(setpanelicon, "are:_10x9_R_.b");
+                                syscall(setpanelicon, "tee:_10x9_T_.b");
+                                syscall(setpanelicon, "whye:_10x9_Y_.b");
+                                syscall(setpanelicon, "you:_10x9_U_.b");
+                                syscall(setpanelicon, "eye:_10x9_I_.b");
+                                syscall(setpanelicon, "oh:_10x9_O_.b");
+                                syscall(setpanelicon, "pea:_10x9_P_.b");
+
+                                syscall(setpanelicon, "eh:_10x9_A_.b");
+                                syscall(setpanelicon, "ess:_10x9_S_.b");
+                                syscall(setpanelicon, "dee:_10x9_D_.b");
+                                syscall(setpanelicon, "eff:_10x9_F_.b");
+                                syscall(setpanelicon, "gee:_10x9_G_.b");
+                                syscall(setpanelicon, "haitch:_10x9_H_.b");
+                                syscall(setpanelicon, "jay:_10x9_J_.b");
+                                syscall(setpanelicon, "kay:_10x9_K_.b");
+                                syscall(setpanelicon, "elle:_10x9_L_.b");
+
+                                syscall(setpanelicon, "zed:_10x9_Z_.b");
+                                syscall(setpanelicon, "ecks:_10x9_X_.b");
+                                syscall(setpanelicon, "cee:_10x9_C_.b");
+                                syscall(setpanelicon, "vee:_10x9_V_.b");
+                                syscall(setpanelicon, "bee:_10x9_B_.b");
+                                syscall(setpanelicon, "enn:_10x9_N_.b");
+                                syscall(setpanelicon, "emm:_10x9_M_.b");
+
+                                capState = 1;
+                            }
+                            else {
+
+                                syscall(setpanelicon, "caps:_10x9_UP.b");
+
+                                syscall(setpanelicon, "queue:_10x9_q.b");
+                                syscall(setpanelicon, "doubleu:_10x9_w.b");
+                                syscall(setpanelicon, "ee:_10x9_e.b");
+                                syscall(setpanelicon, "are:_10x9_r.b");
+                                syscall(setpanelicon, "tee:_10x9_t.b");
+                                syscall(setpanelicon, "whye:_10x9_y.b");
+                                syscall(setpanelicon, "you:_10x9_u.b");
+                                syscall(setpanelicon, "eye:_10x9_i.b");
+                                syscall(setpanelicon, "oh:_10x9_o.b");
+                                syscall(setpanelicon, "pea:_10x9_p.b");
+
+                                syscall(setpanelicon, "eh:_10x9_a.b");
+                                syscall(setpanelicon, "ess:_10x9_s.b");
+                                syscall(setpanelicon, "dee:_10x9_d.b");
+                                syscall(setpanelicon, "eff:_10x9_f.b");
+                                syscall(setpanelicon, "gee:_10x9_g.b");
+                                syscall(setpanelicon, "haitch:_10x9_h.b");
+                                syscall(setpanelicon, "jay:_10x9_j.b");
+                                syscall(setpanelicon, "kay:_10x9_k.b");
+                                syscall(setpanelicon, "elle:_10x9_l.b");
+
+                                syscall(setpanelicon, "zed:_10x9_z.b");
+                                syscall(setpanelicon, "ecks:_10x9_x.b");
+                                syscall(setpanelicon, "cee:_10x9_c.b");
+                                syscall(setpanelicon, "vee:_10x9_v.b");
+                                syscall(setpanelicon, "bee:_10x9_b.b");
+                                syscall(setpanelicon, "enn:_10x9_n.b");
+                                syscall(setpanelicon, "emm:_10x9_m.b");
+
+                                capState = 0;
+                            }
+                        }
+                        else if ("backspace" == panelControl) {
+                            if (0 != len(currentName)) {
+                                currentName = syscall(tostring, itos(len(currentName) - 1) + ":" + currentName);
+                                syscall(setpaneltext, "BTname:" + currentName + "_");
+                            }
+                        }
+                        else if ("space" == panelControl) {
+                            if ((0 != len(currentName)) && (16 > len(currentName))) {
+                                currentName = currentName + " ";
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("one" == panelControl) {
+                            if (16 > len(currentName)) {
+                                currentName = currentName + "1";
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("two" == panelControl) {
+                            if (16 > len(currentName)) {
+                                currentName = currentName + "2";
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("three" == panelControl) {
+                            if (16 > len(currentName)) {
+                                currentName = currentName + "3";
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("four" == panelControl) {
+                            if (16 > len(currentName)) {
+                                currentName = currentName + "4";
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("five" == panelControl) {
+                            if (16 > len(currentName)) {
+                                currentName = currentName + "5";
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("six" == panelControl) {
+                            if (16 > len(currentName)) {
+                                currentName = currentName + "6";
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("seven" == panelControl) {
+                            if (16 > len(currentName)) {
+                                currentName = currentName + "7";
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("eight" == panelControl) {
+                            if (16 > len(currentName)) {
+                                currentName = currentName + "8";
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("nine" == panelControl) {
+                            if (16 > len(currentName)) {
+                                currentName = currentName + "9";
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("zero" == panelControl) {
+                            if (16 > len(currentName)) {
+                                currentName = currentName + "0";
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("dash" == panelControl) {
+                            if ((0 != len(currentName)) && (16 > len(currentName))) {
+                                currentName = currentName + "-";
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("queue" == panelControl) {
+                            if (16 > len(currentName)) {
+                                if (0 == capState) {
+                                    currentName = currentName + "q";
+                                }
+                                else {
+                                    currentName = currentName + "Q";
+                                }
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("doubleu" == panelControl) {
+                            if (16 > len(currentName)) {
+                                if (0 == capState) {
+                                    currentName = currentName + "w";
+                                }
+                                else {
+                                    currentName = currentName + "W";
+                                }
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("ee" == panelControl) {
+                            if (16 > len(currentName)) {
+                                if (0 == capState) {
+                                    currentName = currentName + "e";
+                                }
+                                else {
+                                    currentName = currentName + "E";
+                                }
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("are" == panelControl) {
+                            if (16 > len(currentName)) {
+                                if (0 == capState) {
+                                    currentName = currentName + "r";
+                                }
+                                else {
+                                    currentName = currentName + "R";
+                                }
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("tee" == panelControl) {
+                            if (16 > len(currentName)) {
+                                if (0 == capState) {
+                                    currentName = currentName + "t";
+                                }
+                                else {
+                                    currentName = currentName + "T";
+                                }
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("whye" == panelControl) {
+                            if (16 > len(currentName)) {
+                                if (0 == capState) {
+                                    currentName = currentName + "y";
+                                }
+                                else {
+                                    currentName = currentName + "Y";
+                                }
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("you" == panelControl) {
+                            if (16 > len(currentName)) {
+                                if (0 == capState) {
+                                    currentName = currentName + "u";
+                                }
+                                else {
+                                    currentName = currentName + "U";
+                                }
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("eye" == panelControl) {
+                            if (16 > len(currentName)) {
+                                if (0 == capState) {
+                                    currentName = currentName + "i";
+                                }
+                                else {
+                                    currentName = currentName + "I";
+                                }
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("oh" == panelControl) {
+                            if (16 > len(currentName)) {
+                                if (0 == capState) {
+                                    currentName = currentName + "o";
+                                }
+                                else {
+                                    currentName = currentName + "O";
+                                }
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("pea" == panelControl) {
+                            if (16 > len(currentName)) {
+                                if (0 == capState) {
+                                    currentName = currentName + "p";
+                                }
+                                else {
+                                    currentName = currentName + "P";
+                                }
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("eh" == panelControl) {
+                            if (16 > len(currentName)) {
+                                if (0 == capState) {
+                                    currentName = currentName + "a";
+                                }
+                                else {
+                                    currentName = currentName + "A";
+                                }
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("ess" == panelControl) {
+                            if (16 > len(currentName)) {
+                                if (0 == capState) {
+                                    currentName = currentName + "s";
+                                }
+                                else {
+                                    currentName = currentName + "S";
+                                }
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("dee" == panelControl) {
+                            if (16 > len(currentName)) {
+                                if (0 == capState) {
+                                    currentName = currentName + "d";
+                                }
+                                else {
+                                    currentName = currentName + "D";
+                                }
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("eff" == panelControl) {
+                            if (16 > len(currentName)) {
+                                if (0 == capState) {
+                                    currentName = currentName + "f";
+                                }
+                                else {
+                                    currentName = currentName + "F";
+                                }
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("gee" == panelControl) {
+                            if (16 > len(currentName)) {
+                                if (0 == capState) {
+                                    currentName = currentName + "g";
+                                }
+                                else {
+                                    currentName = currentName + "G";
+                                }
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("haitch" == panelControl) {
+                            if (16 > len(currentName)) {
+                                if (0 == capState) {
+                                    currentName = currentName + "h";
+                                }
+                                else {
+                                    currentName = currentName + "H";
+                                }
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("jay" == panelControl) {
+                            if (16 > len(currentName)) {
+                                if (0 == capState) {
+                                    currentName = currentName + "j";
+                                }
+                                else {
+                                    currentName = currentName + "J";
+                                }
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("kay" == panelControl) {
+                            if (16 > len(currentName)) {
+                                if (0 == capState) {
+                                    currentName = currentName + "k";
+                                }
+                                else {
+                                    currentName = currentName + "K";
+                                }
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("elle" == panelControl) {
+                            if (16 > len(currentName)) {
+                                if (0 == capState) {
+                                    currentName = currentName + "l";
+                                }
+                                else {
+                                    currentName = currentName + "L";
+                                }
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("zed" == panelControl) {
+                            if (16 > len(currentName)) {
+                                if (0 == capState) {
+                                    currentName = currentName + "z";
+                                }
+                                else {
+                                    currentName = currentName + "Z";
+                                }
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("ecks" == panelControl) {
+                            if (16 > len(currentName)) {
+                                if (0 == capState) {
+                                    currentName = currentName + "x";
+                                }
+                                else {
+                                    currentName = currentName + "X";
+                                }
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("cee" == panelControl) {
+                            if (16 > len(currentName)) {
+                                if (0 == capState) {
+                                    currentName = currentName + "c";
+                                }
+                                else {
+                                    currentName = currentName + "C";
+                                }
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("vee" == panelControl) {
+                            if (16 > len(currentName)) {
+                                if (0 == capState) {
+                                    currentName = currentName + "v";
+                                }
+                                else {
+                                    currentName = currentName + "V";
+                                }
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("bee" == panelControl) {
+                            if (16 > len(currentName)) {
+                                if (0 == capState) {
+                                    currentName = currentName + "b";
+                                }
+                                else {
+                                    currentName = currentName + "B";
+                                }
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("enn" == panelControl) {
+                            if (16 > len(currentName)) {
+                                if (0 == capState) {
+                                    currentName = currentName + "n";
+                                }
+                                else {
+                                    currentName = currentName + "N";
+                                }
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+                        else if ("emm" == panelControl) {
+                            if (16 > len(currentName)) {
+                                if (0 == capState) {
+                                    currentName = currentName + "m";
+                                }
+                                else {
+                                    currentName = currentName + "M";
+                                }
+                                if (16 > len(currentName)) {
+                                    syscall(setpaneltext, "BTname:" + currentName + "_");
+                                }
+                                else {
+                                    syscall(setpaneltext, "BTname:" + currentName);
+                                }
+                            }
+                        }
+
+                        syscall(runpanelfile, "");
+                    }
+//  Taken from "keyIn03"
+                    panelStatus = "tools";
+                }
+                else if ("remSelect" == panelStatus) {
+                    syscall(loadpanelfile, "_exec2.p");
+                    syscall(setpaneltext, "pgmname:Remote Select");
+                    syscall(setpanelicon, "tools:_3remote.b");
+                    syscall(loadsubpanelfile, "_remote.p");
+                    syscall(setactivepanelcontrol, "remSelect:1");
+                    if ("PANASONIC" == (panelStatus = syscall(irgetremote, ""))) {
+                        syscall(setpanelvalue, "remSelect:1");
+                    }
+                    else if ("TOSHIBA" == panelStatus) {
+                        syscall(setpanelvalue, "remSelect:2");
+                    }
+                    else {
+                        syscall(setpanelvalue, "remSelect:3");
+                    }
+                    syscall(runpanelfile, "");
+                    for (; "END:return" != syscall(getactivepanelstatus, "");) {
+                        panelStatus = syscall(fromstring, "4:" + syscall(getactivepanelstatus, ""));
+                        if ("return" != syscall(substring, "4:10:" + syscall(getactivepanelstatus, ""))) {
+                            if ("END:" == syscall(tostring, "4:" + syscall(getactivepanelstatus, ""))) {
+                                i = stoi(syscall(fromstring, "14:" + syscall(getactivepanelstatus, "")));
+                                syscall(setpanelvalue, "remSelect:" + itos(i));
+                                switch (i) {
+                                case 1:  //  Panasonic
+                                    syscall(irremotepanasonic, "");
+                                    syscall(setpanelvalue, "remSelect:1");
+                                    break;
+                                case 2:  //  Toshiba
+                                    syscall(irremotetoshiba, "");
+                                    syscall(setpanelvalue, "remSelect:2");
+                                    break;
+                                case 3:  //  LG
+                                    syscall(irremotelg, "");
+                                    syscall(setpanelvalue, "remSelect:3");
+                                    break;
+                                }
+                                syscall(runpanelfile, "");
+                            }
+                        }
+                    }
+                    panelStatus = "tools";
+                }
+                else if ("about" == panelStatus) {
+                    syscall(loadpanelfile, "_exec2.p");
+                    syscall(setpaneltext, "pgmname:About Robot");
+                    syscall(setpanelicon, "tools:_2about.b");
+                    syscall(loadsubpanelfile, "_about3.p");
+                    syscall(setpaneltext, "hwVersion:HW Ver: " + syscall(fromstring, "6:" + syscall(gethardwareversion, "")));
+                    syscall(setpaneltext, "swVersion:SW Ver: " + syscall(tostring, "2:" + syscall(getsoftwareversion, "")));
+                    syscall(setpaneltext, "uiVersion:UI Ver: " + uiVersion);
+                    syscall(runpanelfile, "");
+                    for (; "RUN:" == syscall(tostring, "4:" + syscall(getactivepanelstatus, ""));) {
+                    }
+                    panelStatus = "tools";
+                }
+                else if ("file" == panelStatus) {
+                    firstFile = 0;
+                    fileChangeFlag = 0; 
+                    for (i = 0; MAXFILES > i; ++i) {
+                        originalMenuFiles[i] = menuFiles[i];
+                    }
+                    panelControl = "name1";
+                    syscall(loadpanelfile, "_exec2.p");
+                    syscall(setpaneltext, "pgmname:Files");
+                    syscall(setpanelicon, "tools:_2file.b");
+                    syscall(loadsubpanelfile, "_file_01.p");
+                    for (;;) {
+                        syscall(dir, "*.s");  fileList = "";  
+                        for (numFiles = 0; "" != (currentFile = syscall(dirnext, ""));) {
+                            if (("_start.s" != currentFile) && ((uiVersion + ".s") != currentFile)) {
+                                ++numFiles;
+                                 if ("" == fileList) {
+                                    fileList = currentFile;
+                                }
+                                else {
+                                    fileList = fileList + "\r\n" + currentFile;
+                                }
+                            }
+                        }
+                        if ((firstFile + 1) > numFiles) {
+                            if (("name1" == panelControl) || ("name1_left" == panelControl) ||
+                                ("name1_pos" == panelControl) || ("name1_right" == panelControl) ||
+                                ("name1_erase" == panelControl)) {
+                                panelControl = "return";
+                            }
+                            else if (("name2" == panelControl) || ("name2_left" == panelControl) ||
+                                ("name2_pos" == panelControl) || ("name2_right" == panelControl) ||
+                                ("name2_erase" == panelControl)) {
+                                panelControl = "return";
+                            }
+                            else if (("name3" == panelControl) || ("name3_left" == panelControl) ||
+                                ("name3_pos" == panelControl) || ("name3_right" == panelControl) ||
+                                ("name3_erase" == panelControl)) {
+                                panelControl = "return";
+                            }
+                            syscall(setpaneltext, "name1: ");
+                            syscall(setpaneltext, "name1_pos: ");
+                            syscall(setpanelicon, "name1_left:_8x11_Bl.b");
+                            syscall(setpanelicon, "name1_right:_8x11_Bl.b");
+                            syscall(setpanelicon, "name1_erase:_11x11_B.b");
+                            syscall(nostoppanelcontrol, "name1");
+                            syscall(nostoppanelcontrol, "name1_left");
+                            syscall(nostoppanelcontrol, "name1_right");
+                            syscall(nostoppanelcontrol, "name1_erase");
+                        }
+                        else {                       
+                            for (i = 0, currentFile = fileList; firstFile > i; ++i) {
+                                for (j = 0; len(currentFile) > j; ++j) {
+                                    if ('\r' == currentFile.j) {
+                                        break;
+                                    }
+                                }
+                                currentFile = syscall(fromstring, itos(j + 2) + ":" + currentFile);
+                            }
+                            for (j = 0; len(currentFile) > j; ++j) {
+                                if ('\r' == currentFile.j) {
+                                    break;
+                                }
+                            }
+                            scriptFile1 = syscall(tostring, itos(j) + ":" + currentFile);
+                            syscall(setpaneltext, "name1:" + scriptFile1);
+                            syscall(setpanelicon, "name1_left:_8x11_AL.b");
+                            syscall(setpanelicon, "name1_right:_8x11_AR.b");
+                            syscall(setpanelicon, "name1_erase:_11x11_E.b");
+                            syscall(stoppanelcontrol, "name1");
+                            syscall(stoppanelcontrol, "name1_left");
+                            syscall(stoppanelcontrol, "name1_right");
+                            syscall(stoppanelcontrol, "name1_erase");
+                            for (i = 0; MAXFILES > i; ++i) {
+                                if (scriptFile1 == menuFiles[i]) {
+                                    break;
+                                }
+                            }
+                            if (MAXFILES == i) {
+                                syscall(setpaneltext, "name1_pos:-");
+                            }
+                            else {
+                                syscall(setpaneltext, "name1_pos:" + itos(i + 1));
+                            }
+                        }
+                        if ((firstFile + 2) > numFiles) {
+                            if ("name2" == panelControl) {
+                                panelControl = "name1";
+                            } 
+                            else if ("name2_left" == panelControl) {
+                                panelControl = "name1_left";
+                            }
+                            else if ("name2_pos" == panelControl) {
+                                panelControl = "name1_pos";
+                            }
+                            else if ("name2_erase" == panelControl) {
+                                panelControl = "name1_erase";
+                            }
+                            else if ("name3" == panelControl) {
+                                panelControl = "name2";
+                            } 
+                            else if ("name3_left" == panelControl) {
+                                panelControl = "name2_left";
+                            }
+                            else if ("name3_pos" == panelControl) {
+                                panelControl = "name2_pos";
+                            }
+                            else if ("name3_erase" == panelControl) {
+                                panelControl = "name2_erase";
+                            }
+                            syscall(setpaneltext, "name2: ");
+                            syscall(setpaneltext, "name2_pos: ");
+                            syscall(setpanelicon, "name2_left:_8x11_Bl.b");
+                            syscall(setpanelicon, "name2_right:_8x11_Bl.b");
+                            syscall(setpanelicon, "name2_erase:_11x11_B.b");
+                            syscall(nostoppanelcontrol, "name2");
+                            syscall(nostoppanelcontrol, "name2_left");
+                            syscall(nostoppanelcontrol, "name2_right");
+                            syscall(nostoppanelcontrol, "name2_erase");
+                        }
+                        else {                       
+                            for (i = 0, currentFile = fileList; (firstFile + 1) > i; ++i) {
+                                for (j = 0; len(currentFile) > j; ++j) {
+                                    if ('\r' == currentFile.j) {
+                                        break;
+                                    }
+                                }
+                                currentFile = syscall(fromstring, itos(j + 2) + ":" + currentFile);
+                            }
+                            for (j = 0; len(currentFile) > j; ++j) {
+                                if ('\r' == currentFile.j) {
+                                    break;
+                                }
+                            }
+                            scriptFile2 = syscall(tostring, itos(j) + ":" + currentFile);
+                            syscall(setpaneltext, "name2:" + scriptFile2);
+                            syscall(setpanelicon, "name2_left:_8x11_AL.b");
+                            syscall(setpanelicon, "name2_right:_8x11_AR.b");
+                            syscall(setpanelicon, "name2_erase:_11x11_E.b");
+                            syscall(stoppanelcontrol, "name2");
+                            syscall(stoppanelcontrol, "name2_left");
+                            syscall(stoppanelcontrol, "name2_right");
+                            syscall(stoppanelcontrol, "name2_erase");
+                            for (i = 0; MAXFILES > i; ++i) {
+                                if (scriptFile2 == menuFiles[i]) {
+                                    break;
+                                }
+                            }
+                            if (MAXFILES == i) {
+                                syscall(setpaneltext, "name2_pos:-");
+                            }
+                            else {
+                                syscall(setpaneltext, "name2_pos:" + itos(i + 1));
+                            }
+                        }
+                        if ((firstFile + 3) > numFiles) {
+                            if ("name3" == panelControl) {
+                                panelControl = "name2";
+                            } 
+                            else if ("name3_left" == panelControl) {
+                                panelControl = "name2_left";
+                            }
+                            else if ("name3_pos" == panelControl) {
+                                panelControl = "name2_pos";
+                            }
+                            else if ("name3_erase" == panelControl) {
+                                panelControl = "name2_erase";
+                            }
+                            syscall(setpaneltext, "name3: ");
+                            syscall(setpaneltext, "name3_pos: ");
+                            syscall(setpanelicon, "name3_left:_8x11_Bl.b");
+                            syscall(setpanelicon, "name3_right:_8x11_Bl.b");
+                            syscall(setpanelicon, "name3_erase:_11x11_B.b");
+                            syscall(nostoppanelcontrol, "name3");
+                            syscall(nostoppanelcontrol, "name3_left");
+                            syscall(nostoppanelcontrol, "name3_right");
+                            syscall(nostoppanelcontrol, "name3_erase");
+                        }
+                        else {                       
+                            for (i = 0, currentFile = fileList; (firstFile + 2) > i; ++i) {
+                                for (j = 0; len(currentFile) > j; ++j) {
+                                    if ('\r' == currentFile.j) {
+                                        break;
+                                    }
+                                }
+                                currentFile = syscall(fromstring, itos(j + 2) + ":" + currentFile);
+                            }
+                            for (j = 0; len(currentFile) > j; ++j) {
+                                if ('\r' == currentFile.j) {
+                                    break;
+                                }
+                            }
+                            scriptFile3 = syscall(tostring, itos(j) + ":" + currentFile);
+                            syscall(setpaneltext, "name3:" + scriptFile3);
+                            syscall(setpanelicon, "name3_left:_8x11_AL.b");
+                            syscall(setpanelicon, "name3_right:_8x11_AR.b");
+                            syscall(setpanelicon, "name3_erase:_11x11_E.b");
+                            syscall(stoppanelcontrol, "name3");
+                            syscall(stoppanelcontrol, "name3_left");
+                            syscall(stoppanelcontrol, "name3_right");
+                            syscall(stoppanelcontrol, "name3_erase");
+                            for (i = 0; MAXFILES > i; ++i) {
+                                if (scriptFile3 == menuFiles[i]) {
+                                    break;
+                                }
+                            }
+                            if (MAXFILES == i) {
+                                syscall(setpaneltext, "name3_pos:-");
+                            }
+                            else {
+                                syscall(setpaneltext, "name3_pos:" + itos(i + 1));
+                            }
+                        }
+                        i = stoi(syscall(fileavail, ""));
+                        i = (i + 500) / 1000;
+                        syscall(setpaneltext, "avail:Free: " + itos(i) + "k");
+                        syscall(setactivepanelcontrol, panelControl);
+                        syscall(runpanelfile, "");
+                        for (; "RUN:" == syscall(tostring, "4:" + syscall(getactivepanelstatus, ""));) {
+                        }
+                        if ("return" == (panelControl = 
+                                syscall(fromstring, "4:" + syscall(getactivepanelstatus, "")))) {
+                            break;
+                        }
+                        else if (("scroll_up" == panelControl) && (0 < firstFile)) {
+                            --firstFile;
+                        }
+                        else if (("scroll_down" == panelControl) && ((numFiles - 3) > firstFile)) {
+                            ++firstFile;
+                        }
+                        else if ("name1" == panelControl) {
+                            syscall(exec, scriptFile1);
+                            syscall(motorleftset, "0");  syscall(motorrightset, "0");
+                            syscall(loadpanelfile, "_exec2.p");
+                            syscall(setpaneltext, "pgmname:Files");
+                            syscall(setpanelicon, "tools:_2file.b");
+                            syscall(loadsubpanelfile, "_file_01.p");
+                        }
+                        else if ("name2" == panelControl) {
+                            syscall(exec, scriptFile2);
+                            syscall(motorleftset, "0");  syscall(motorrightset, "0");
+                            syscall(loadpanelfile, "_exec2.p");
+                            syscall(setpaneltext, "pgmname:Files");
+                            syscall(setpanelicon, "tools:_2file.b");
+                            syscall(loadsubpanelfile, "_file_01.p");
+                        }
+                        else if ("name3" == panelControl) {
+                            syscall(exec, scriptFile3);
+                            syscall(motorleftset, "0");  syscall(motorrightset, "0");
+                            syscall(loadpanelfile, "_exec2.p");
+                            syscall(setpaneltext, "pgmname:Files");
+                            syscall(setpanelicon, "tools:_2file.b");
+                            syscall(loadsubpanelfile, "_file_01.p");
+                        }
+                        else if ("garbage" == panelControl) {
+                            syscall(filegarbage, "");
+                        }
+                        else if ("name1_erase" == panelControl) {
+                            if ("YES" == syscall(messageboxnoyes, "Delete " + scriptFile1 + " Are you sure?")) {
+                                syscall(allfiledelete, scriptFile1);
+                                for (i = 0; MAXFILES > i; ++i) {
+                                    if (scriptFile1 == menuFiles[i]) {
+                                        break;
+                                    }
+                                }
+                                if (MAXFILES != i) {
+                                    for (; (MAXFILES - 1) > i; ++i) {
+                                        menuFiles[i] = menuFiles[i + 1];
+                                    }
+                                    menuFiles[i] = "";
+                                    for (_activeFile = "", i = 0; MAXFILES > i; ++i) {
+                                        if ("" != menuFiles[i]) {
+                                            _activeFile = _activeFile + menuFiles[i] + "\r\n";
+                                        }
+                                    }
+                                    syscall(filedelete, "_file.txt");
+                                    syscall(filewrite, "_file.txt:" + _activeFile);
+                                    for (i = 0; MAXFILES > i; ++i) {
+                                        originalMenuFiles[i] = menuFiles[i];
+                                    }
+                                    fileChangeFlag = 0;
+                                }
+                            }
+                        }
+                        else if ("name2_erase" == panelControl) {
+                            if ("YES" == syscall(messageboxnoyes, "Delete " + scriptFile2 + " Are you sure?")) {
+                                syscall(allfiledelete, scriptFile2);
+                                for (i = 0; MAXFILES > i; ++i) {
+                                    if (scriptFile2 == menuFiles[i]) {
+                                        break;
+                                    }
+                                }
+                                if (MAXFILES != i) {
+                                    for (; (MAXFILES - 1) > i; ++i) {
+                                        menuFiles[i] = menuFiles[i + 1];
+                                    }
+                                    menuFiles[i] = "";
+                                    for (_activeFile = "", i = 0; MAXFILES > i; ++i) {
+                                        if ("" != menuFiles[i]) {
+                                            _activeFile = _activeFile + menuFiles[i] + "\r\n";
+                                        }
+                                    }
+                                    syscall(filedelete, "_file.txt");
+                                    syscall(filewrite, "_file.txt:" + _activeFile);
+                                    for (i = 0; MAXFILES > i; ++i) {
+                                        originalMenuFiles[i] = menuFiles[i];
+                                    }
+                                    fileChangeFlag = 0;
+                                }
+                            }
+                        }
+                        else if ("name3_erase" == panelControl) {
+                            if ("YES" == syscall(messageboxnoyes, "Delete " + scriptFile3 + " Are you sure?")) {
+                                syscall(allfiledelete, scriptFile3);
+                                for (i = 0; MAXFILES > i; ++i) {
+                                    if (scriptFile3 == menuFiles[i]) {
+                                        break;
+                                    }
+                                }
+                                if (MAXFILES != i) {
+                                    for (; (MAXFILES - 1) > i; ++i) {
+                                        menuFiles[i] = menuFiles[i + 1];
+                                    }
+                                    menuFiles[i] = "";
+                                    for (_activeFile = "", i = 0; MAXFILES > i; ++i) {
+                                        if ("" != menuFiles[i]) {
+                                            _activeFile = _activeFile + menuFiles[i] + "\r\n";
+                                        }
+                                    }
+                                    syscall(filedelete, "_file.txt");
+                                    syscall(filewrite, "_file.txt:" + _activeFile);
+                                    for (i = 0; MAXFILES > i; ++i) {
+                                        originalMenuFiles[i] = menuFiles[i];
+                                    }
+                                    fileChangeFlag = 0;
+                                }
+                            }
+                        }
+                        else if ("name1_left" == panelControl) {  //  Up
+                            if ("-" == syscall(getpaneltext, "name1_pos")) {  //  Move in
+                                for (i = 0; MAXFILES > i; ++i) {
+                                    if ("" == menuFiles[i]) {
+                                        break;
+                                    }
+                                }
+                                if (MAXFILES > i) {  //  Add New Last
+                                    menuFiles[i] = scriptFile1;
+                                }
+                                else {  //  Replace Last
+                                    menuFiles[MAXFILES - 1] = scriptFile1;
+                                }
+                                fileChangeFlag = -1; 
+                            }
+                            else if (1 != (i = stoi(syscall(getpaneltext, "name1_pos")))) {
+                                tempName = menuFiles[i - 2];
+                                menuFiles[i - 2] = menuFiles[i - 1];
+                                menuFiles[i - 1] = tempName;
+                                fileChangeFlag = -1; 
+                            }
+                        }
+                        else if ("name1_right" == panelControl) {  //  Down
+                            if ("-" != syscall(getpaneltext, "name1_pos")) {  
+                                for (i = 0; MAXFILES > i; ++i) {
+                                    if ("" == menuFiles[i]) {
+                                        break;
+                                    }
+                                }
+                                if (MAXFILES == i) {  //  Full Up
+                                    if (MAXFILES == stoi(syscall(getpaneltext, "name1_pos"))) {  
+                                        menuFiles[MAXFILES - 1] = "";
+                                    }
+                                    else {
+                                        i = stoi(syscall(getpaneltext, "name1_pos")) - 1;
+                                        tempName = menuFiles[i];  
+                                        menuFiles[i] = menuFiles[i + 1];
+                                        menuFiles[i + 1] = tempName;
+                                    }
+                                }
+                                else {
+                                    if ((i + 1) == stoi(syscall(getpaneltext, "name1_pos"))) {  
+                                        menuFiles[i] = "";
+                                    }
+                                    else {
+                                        i = stoi(syscall(getpaneltext, "name1_pos")) - 1;
+                                        tempName = menuFiles[i];  
+                                        menuFiles[i] = menuFiles[i + 1];
+                                        menuFiles[i + 1] = tempName;
+                                    }
+                                }
+                                fileChangeFlag = -1; 
+                            }
+                        }
+                        else if ("name2_left" == panelControl) {
+                            if ("-" == syscall(getpaneltext, "name2_pos")) {  //  Move in
+                                for (i = 0; MAXFILES > i; ++i) {
+                                    if ("" == menuFiles[i]) {
+                                        break;
+                                    }
+                                }
+                                if (MAXFILES > i) {  //  Add New Last
+                                    menuFiles[i] = scriptFile2;
+                                }
+                                else {  //  Replace Last
+                                    menuFiles[MAXFILES - 1] = scriptFile2;
+                                }
+                                fileChangeFlag = -1; 
+                            }
+                            else if (1 != (i = stoi(syscall(getpaneltext, "name2_pos")))) {
+                                tempName = menuFiles[i - 2];
+                                menuFiles[i - 2] = menuFiles[i - 1];
+                                menuFiles[i - 1] = tempName;
+                                fileChangeFlag = -1; 
+                            }
+                        }
+                        else if ("name2_right" == panelControl) {
+                            if ("-" != syscall(getpaneltext, "name2_pos")) {  
+                                for (i = 0; MAXFILES > i; ++i) {
+                                    if ("" == menuFiles[i]) {
+                                        break;
+                                    }
+                                }
+                                if (MAXFILES == i) {  //  Full Up
+                                    if (MAXFILES == stoi(syscall(getpaneltext, "name2_pos"))) {  
+                                        menuFiles[MAXFILES - 1] = "";
+                                    }
+                                    else {
+                                        i = stoi(syscall(getpaneltext, "name2_pos")) - 1;
+                                        tempName = menuFiles[i];  
+                                        menuFiles[i] = menuFiles[i + 1];
+                                        menuFiles[i + 1] = tempName;
+                                    }
+                                }
+                                else {
+                                    if ((i + 1) == stoi(syscall(getpaneltext, "name2_pos"))) {  
+                                        menuFiles[i] = "";
+                                    }
+                                    else {
+                                        i = stoi(syscall(getpaneltext, "name2_pos")) - 1;
+                                        tempName = menuFiles[i];  
+                                        menuFiles[i] = menuFiles[i + 1];
+                                        menuFiles[i + 1] = tempName;
+                                    }
+                                }
+                                fileChangeFlag = -1; 
+                            }
+                        }
+                        else if ("name3_left" == panelControl) {
+                            if ("-" == syscall(getpaneltext, "name3_pos")) {  //  Move in
+                                for (i = 0; MAXFILES > i; ++i) {
+                                    if ("" == menuFiles[i]) {
+                                        break;
+                                    }
+                                }
+                                if (MAXFILES > i) {  //  Add New Last
+                                    menuFiles[i] = scriptFile3;
+                                }
+                                else {  //  Replace Last
+                                    menuFiles[MAXFILES - 1] = scriptFile3;
+                                }
+                                fileChangeFlag = -1; 
+                            }
+                            else if (1 != (i = stoi(syscall(getpaneltext, "name3_pos")))) {
+                                tempName = menuFiles[i - 2];
+                                menuFiles[i - 2] = menuFiles[i - 1];
+                                menuFiles[i - 1] = tempName;
+                                fileChangeFlag = -1; 
+                            }
+                        }
+                        else if ("name3_right" == panelControl) {
+                            if ("-" != syscall(getpaneltext, "name3_pos")) {  
+                                for (i = 0; MAXFILES > i; ++i) {
+                                    if ("" == menuFiles[i]) {
+                                        break;
+                                    }
+                                }
+                                if (MAXFILES == i) {  //  Full Up
+                                    if (MAXFILES == stoi(syscall(getpaneltext, "name3_pos"))) {  
+                                        menuFiles[MAXFILES - 1] = "";
+                                    }
+                                    else {
+                                        i = stoi(syscall(getpaneltext, "name3_pos")) - 1;
+                                        tempName = menuFiles[i];  
+                                        menuFiles[i] = menuFiles[i + 1];
+                                        menuFiles[i + 1] = tempName;
+                                    }
+                                }
+                                else {
+                                    if ((i + 1) == stoi(syscall(getpaneltext, "name3_pos"))) {  
+                                        menuFiles[i] = "";
+                                    }
+                                    else {
+                                        i = stoi(syscall(getpaneltext, "name3_pos")) - 1;
+                                        tempName = menuFiles[i];  
+                                        menuFiles[i] = menuFiles[i + 1];
+                                        menuFiles[i + 1] = tempName;
+                                    }
+                                }
+                                fileChangeFlag = -1; 
+                            }
+                        }
+                    }
+                    if (fileChangeFlag) {
+                        if ("YES" == syscall(messageboxnoyes, "Change Main Menu Files?")) {
+                            for (_activeFile = "", i = 0; MAXFILES > i; ++i) {
+                                if ("" != menuFiles[i]) {
+                                    _activeFile = _activeFile + menuFiles[i] + "\r\n";
+                                }
+                            }
+                            syscall(filedelete, "_file.txt");
+                            syscall(filewrite, "_file.txt:" + _activeFile);
+                        }
+                        else {  //  No, return to original
+                            for (i = 0; MAXFILES > i; ++i) {
+                                menuFiles[i] = originalMenuFiles[i];
+                            }
+                        }
+                    }
+                    panelStatus = "tools";
+                }
+                else if ("volSelect" == panelStatus) {
+                    syscall(loadpanelfile, "_exec2.p");
+                    syscall(setpanelicon, "tools:_vol.b");
+                    syscall(loadsubpanelfile, "_setvol1.p");
+                    syscall(setpaneltext, "pgmname:Set Volume");
+                    syscall(setactivepanelcontrol, "upButton");  
+                    volume = _vol1upDate();
+                    syscall(runpanelfile, "");
+
+                    for (;;) {
+                        for (; "RUN:" == syscall(tostring, "4:" + (panelControl = syscall(getactivepanelstatus, "")));) {
+                        }
+                        if ("return" == (panelControl = syscall(fromstring, "4:" + panelControl))) {
+                            break;
+                        }
+                        else if ("test" == syscall(tostring, itos(len("test")) + ":" + panelControl)) {
+                            syscall(playwavefile, "_SndTest.w");
+                            syscall(setpanelvalue, "test:0");  
+                        }
+                        else if ("upButton" == panelControl) {
+                            if (3 > volume) {
+                                syscall(setvolume, itos(++volume));
+                            }
+                        }
+                        else if ("downButton" == panelControl) {
+                            if (0 < volume) {
+                                syscall(setvolume, itos(--volume));
+                            }
+                        }
+                        volume = _vol1upDate();
+                        syscall(runpanelfile, "");
+                    }
+                    panelStatus = "tools";
+                }
+                else if ("sleepSet" == panelStatus) {
+                    syscall(loadpanelfile, "_exec2.p");
+                    syscall(setpanelicon, "tools:_2sleep.b");
+                    syscall(loadsubpanelfile, "_sleep01.p");
+                    syscall(setpaneltext, "pgmname:Sleep Timeout");
+                    if (-1 == stoi(syscall(getsleep, ""))) {
+                        syscall(setactivepanelcontrol, "sleepOff:1");  
+                    }
+                    else {
+                        syscall(setactivepanelcontrol, "upButton");  
+                    }
+                    sleepTime = _sleep01upDate();
+                    syscall(runpanelfile, "");
+
+                    for (;;) {
+                        for (; "RUN:" == syscall(tostring, "4:" + (panelControl = syscall(getactivepanelstatus, "")));) {
+                        }
+                        if ("return" == (panelControl = syscall(fromstring, "4:" + panelControl))) {
+                            break;
+                        }
+                        else if ("sleepOff" == syscall(tostring, itos(len("sleepOff")) + ":" + panelControl)) {
+                            if (0 == stoi(syscall(getpanelvalue, "sleepOff"))) {
+                                syscall(setpanelvalue, "sleepOff:1");  
+                                syscall(sleepoff, "");
+                            }
+                            else {
+                                syscall(setpanelvalue, "sleepOff:0");  
+                                syscall(setsleep, "2");  //  Go to a default of 2 minutes to sleep
+                            }
+                        }
+                        else if ("upButton" == panelControl) {
+                            if (99 > sleepTime) {
+                                syscall(setsleep, itos(++sleepTime));
+                            }
+                        }
+                        else if ("downButton" == panelControl) {
+                            if (1 < sleepTime) {
+                                syscall(setsleep, itos(--sleepTime));
+                            }
+                        }
+                        sleepTime = _sleep01upDate();
+                        syscall(runpanelfile, "");
+                    }
+                    panelStatus = "tools";
+                }
+                else if ("calib" == panelStatus) {
+                    _calibFile = syscall(fileread, "_calib.txt");
+                    for (i = _calibTurn = 0; '\r' != _calibFile.i; ++i) 
+                    {
+                        _calibTurn = (_calibTurn * 10) + _calibFile.i - '0';
+                    }
+                    for (i += 2, _calibLine = 0; '\r' != _calibFile.i; ++i) 
+                    {
+                        _calibLine = (_calibLine * 10) + _calibFile.i - '0';
+                    }
+                    orig_calibTurn = _calibTurn;  orig_calibLine = _calibLine;
+                    syscall(loadpanelfile, "_exec2.p");
+                    syscall(loadsubpanelfile, "_calib.p");
+                    syscall(setpanelicon, "tools:_2calib.b");
+                    syscall(setpaneltext, "pgmname:Calibration");
+                    syscall(setactivepanelcontrol, panelControl = "turnLess");  
+                    syscall(setpanelvalue, "turnSlider:" + itos(_calibTurn - 50));
+                    syscall(setpanelvalue, "lineSlider:" + itos(_calibLine - 50));
+                    syscall(runpanelfile, "");
+    
+                    for (;;) {
+                        for (; "RUN:" == syscall(tostring, "4:" + (panelStatus = syscall(getactivepanelstatus, "")));) {
+                        }
+            
+                        if ("return" == (panelControl = syscall(fromstring, "4:" + panelStatus))) {
+                            if ((orig_calibTurn != _calibTurn) || (orig_calibLine != _calibLine)) {
+                                if ("YES" == syscall(messageboxyesno, "Save Calibration Values?")) {
+                                    syscall(filedelete, "_calib.txt");
+                                    syscall(filewrite, "_calib.txt:" + itos(_calibTurn) + "\r\n" + itos(_calibLine) + "\r\n");
+                                }
+                            }
+                            break;
+                        }
+                        else if ("turnLess" == panelControl) {
+//                            if (50 < _calibTurn) {
+                            if (75 < _calibTurn) {
+                                --_calibTurn;
+                            }
+                        }
+                        else if ("turnMore" == panelControl) {
+//                            if (150 > _calibTurn) {
+                            if (125 > _calibTurn) {
+                                ++_calibTurn;
+                            }
+                        }
+                        else if ("lineLeft" == panelControl) {
+//                            if (50 < _calibLine) {
+                            if (75 < _calibLine) {
+                                --_calibLine;
+                            }
+                        }
+                        else if ("lineRite" == panelControl) {
+//                            if (150 > _calibLine) {
+                            if (125 > _calibLine) {
+                                ++_calibLine;
+                            }
+                        }
+                        else if ("turnTest" == panelControl) {
+                            syscall(motorleftset, itos(100));  syscall(motorrightset, itos(-100));
+                            syscall(delay, itos((4000 * _calibTurn) / 100));
+                            syscall(delay, itos((1000 * _calibTurn) / 100));
+                            syscall(motorleftset, itos(0));  syscall(motorrightset, itos(0));
+                        }
+                        else if ("lineTest" == panelControl) {
+                            if (100 > _calibLine) {
+                                syscall(motorleftset, itos(_calibLine));  
+                                syscall(motorrightset, itos(100));
+                            }
+                            else if (100 < _calibLine) {
+                                syscall(motorleftset, itos(100));  
+                                syscall(motorrightset, itos(200 - _calibLine));
+                            }
+                            else {
+                                syscall(motorleftset, itos(100));  syscall(motorrightset, itos(100));
+                            }
+                            syscall(delay, itos(4000));
+                            syscall(motorleftset, itos(0));  syscall(motorrightset, itos(0));
+                        }
+//                        syscall(setpanelvalue, "turnSlider:" + itos(_calibTurn - 50));
+//                        syscall(setpanelvalue, "lineSlider:" + itos(_calibLine - 50));
+                        syscall(setpanelvalue, "turnSlider:" + itos((_calibTurn - 75) * 2));
+                        syscall(setpanelvalue, "lineSlider:" + itos((_calibLine - 75) * 2));
+                        syscall(runpanelfile, "");
+                    }
+
+                    panelStatus = "tools";
+                }
+                else if ("return" == panelStatus) {
+                    activeControl = "tools";
+                    break;  //  Do nothing - code flow will return
+                }
+                else {
+                    syscall(error, "Unknown panelStatus = \"" + panelStatus + "\"");
+                }
+            }
+        }
+    }
+
+
+int _vol1upDate() {
+int                         volume = stoi(syscall(getvolume, ""));
+
+
+    syscall(setpanelicon, "ones:_16x24_" + itos(volume % 10) + ".b");
+    syscall(setpanelvalue, "test:0");  
+
+    return volume;
+
+}
+
+
+int _sleep01upDate() {
+int                         sleepTime = stoi(syscall(getsleep, ""));
+
+
+    if (-1 == sleepTime) {
+        syscall(nostoppanelcontrol, "upButton");  syscall(nostoppanelcontrol, "downButton");
+        syscall(setpanelicon, "tens:_16x24__.b");
+        syscall(setpanelicon, "ones:_16x24__.b");
+        syscall(setpanelvalue, "sleepOff:1");  
+    }
+    else {
+        syscall(stoppanelcontrol, "upButton");    syscall(stoppanelcontrol, "downButton");
+        if (10 > sleepTime) {  //  Less than 10 minutes for timeout
+            syscall(setpanelicon, "tens:_16x24__.b");
+        }
+        else {
+            syscall(setpanelicon, "tens:_16x24_" + itos(sleepTime / 10) + ".b");
+        }
+        syscall(setpanelicon, "ones:_16x24_" + itos(sleepTime % 10) + ".b");
+        syscall(setpanelvalue, "sleepOff:0");  
+    }
+
+    return sleepTime;
+
+}
